@@ -23,14 +23,12 @@ subject_list=`cat subject_list_AROMA.txt`
 
 # Loop through subjects and run job_mriqc
 for subject in $subject_list; do
-  dcmfolder=`echo $subject|awk '{print $1}' FS=","`
-    #this is obsolete
-	subid=`echo $subject|awk '{print $2}' FS=","`
-	sessid=`echo $subject|awk '{print $3}' FS=","`
+	subid=`echo $subject | awk -F "," '{print $1}'`
+	sessid=`echo $subject | awk -F "," '{print $2}'`
 	echo $subid, $sessid
 	sbatch --export ALL,subid=${subid},sessid=${sessid},group_dir=${group_dir},study_dir=${study_dir},study=${study},container=${container},freesurferlicense=${freesurferlicense} \
 		   --job-name fmriprep \
-		   --partition=short \
+		   --partition=ctn \
 		   --cpus-per-task=8 \
 		   --mem=10G \
 		   -o "${output_dir}"/"${subid}"_"${sessid}"_fmriprep_AROMA_output.txt \
