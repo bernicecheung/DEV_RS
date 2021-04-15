@@ -26,6 +26,11 @@ mkdir -p $working_dir
 # Run container using singularity
 cd $bids_dir
 
+#create a temp dir just for this job
+job_tempdir=${USER}_${study}_${subid}_${sessid}
+
+mkdir -p /tmp/${job_tempdir}
+
 for task in ${tasks[@]}; do
 	echo -e "\nStarting on: $task"
 	echo -e "\n"
@@ -49,4 +54,4 @@ for task in ${tasks[@]}; do
 done
 
 # clean tmp folder
-/usr/bin/rm -rvf /tmp/fmriprep*
+/usr/bin/rm -rvf /tmp/${job_tempdir}/fmriprep*
