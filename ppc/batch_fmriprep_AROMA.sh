@@ -19,13 +19,26 @@ fi
 
 
 # Set subject list
-subject_list=`cat subject_list_AROMA.txt` 
+subject_list=`cat subject_list_rs.txt` 
+
+pre_subid=""
+pre_sessionid=""
 
 # Loop through subjects and run job_mriqc
 for subject in $subject_list; do
 	subid=`echo $subject | awk -F "," '{print $1}'`
 	sessid=`echo $subject | awk -F "," '{print $2}'`
 	echo $subid, $sessid
+	if [ "$subid" == "$pre_subid" ] && [ "$sessid" == "$pre_sessionid" ]; then
+		echo "same session"
+		continue
+	fi
+	prepOutput_dir="${study_dir}"/bids_data/rs_derivatives/fmriprep/sub-"$subid"/ses-"$sessid"/func
+	[ -d "${prepOutput_dir}" ] && { prep_files=$(find $prepOutput_dir -name "*acq-1*" | wc -l)
+	if [ "$prep_files" == 5 ]; then
+		echo "skip"
+		continue
+	fi; }
 	sbatch --export ALL,subid=${subid},sessid=${sessid},group_dir=${group_dir},study_dir=${study_dir},study=${study},container=${container},freesurferlicense=${freesurferlicense} \
 		   --job-name fmriprep \
 		   --partition=ctn \
@@ -34,5 +47,7 @@ for subject in $subject_list; do
 		   -o "${output_dir}"/"${subid}"_"${sessid}"_fmriprep_AROMA_output.txt \
 		   -e "${output_dir}"/"${subid}"_"${sessid}"_fmriprep_AROMA_error.txt \
 		   --account=sanlab \
-		   job_fmriprep_AROMA.sh
+		   job_fmriprep_rs.sh
+	pre_subid=$subid
+	pre_sessionid=$sessid
 done
