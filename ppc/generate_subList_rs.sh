@@ -9,6 +9,7 @@ study=DEV
 bids_dir="${group_dir}""${study}"/bids_data
 subList_dir="${group_dir}""${study}"/DEV_scripts/rsfMRI/ppc/
 
+cd $bids_dir
 # goes into each subject folder to check if there's resting state data
 for dir in */; do
     if [[ "$dir" == *"sub-DEV"* ]] && [[ "$dir" != *"backup"* ]]; then
