@@ -134,3 +134,6 @@ dmypy.json
 
 # vc code
 **.vscode
+
+# output folder
+**post_fmriprep
