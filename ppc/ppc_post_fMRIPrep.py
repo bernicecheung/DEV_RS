@@ -7,6 +7,7 @@ This script apply space smoothing and high pass filting to fMRIPrep output
 
 import os
 import argparse
+import pygraphviz
 from nipype import Node, Workflow
 from nipype.pipeline import engine as pe
 from nipype.interfaces import io as nio
@@ -19,12 +20,12 @@ parser = argparse.ArgumentParser(description='Post FMRIPREP preprocess pipeline.
 parser.add_argument(
     '--base_dir', 
     action='store', 
-    default='/Users/BerniceCheung/Documents/ResearchProject/SAP/DEV_RS/ppc/rs_derivatives',
+    default='/Users/BerniceCheung/Documents/ResearchProject/DEV/DEV_RS/ppc',
     help='The directory where Derivative exist.')
 parser.add_argument(
     '--task-id',
     action='store',
-    default = 'SB',
+    default = 'rest',
     help='Select a specific task to be processed.')
 parser.add_argument(
     '--bold-space',
@@ -50,7 +51,7 @@ parser.add_argument(
     '--smooth-fwhm',
     action='store',
     type=float,
-    default=5,
+    default=4,
     help='Susan smooth FWHM (in mm).')
 parser.add_argument(
     '--highpass',
@@ -70,13 +71,28 @@ parser.add_argument(
 args = parser.parse_args()
 
 # -----------------------
+# Test input argument
+# -----------------------
+
+base_dir = '/Users/BerniceCheung/Documents/ResearchProject/DEV/DEV_RS/ppc'
+subj_id = 'DEV005'
+wave_id = 'wave1'
+acq_id = '1'
+taskid = 'rest'
+bold_space = 'MNI152NLin2009cAsym'
+fwhm = 4 
+hpcutoff = 50 
+n_proc = 1
+
+
+# -----------------------
 # Setup basic inforamtion
 # -----------------------
 # Directories information
 base_dir = args.base_dir # the directory where "derivative" exists (derivative from fmriprep)
 output_dir = os.path.join(base_dir,'post_fmriprep') # the output directory, I made it to be parallel with the derivative folder 
                                                  # importantly, within this directory, make an empty working directory.
-deriv_dir = os.path.join(base_dir,'derivative') 
+deriv_dir = os.path.join(base_dir,'rs_derivatives') 
 src_dir = os.path.join(deriv_dir,'fmriprep') 
 
 # Subject, Run, Task information
@@ -115,11 +131,11 @@ inputnode.inputs.fwhm = fwhm
 # grab input data
 datasource = pe.Node(
     interface = nio.DataGrabber(
-        infields = ['subj_id','task_id','wave_id','acq_id','bold_space'],
+        infields = ['subj_id','wave_id','task_id','acq_id','bold_space'],
         outfields = ['func','brainmask']),
         name = 'datasource')
 # Location of the dataset folder
-datasource.inputs.base_directory = deriv_dir    
+datasource.inputs.base_directory = deriv_dir 
 # Necessary default parameters 
 datasource.inputs.template = '*' 
 datasource.inputs.sort_filelist = True
