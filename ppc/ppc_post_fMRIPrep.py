@@ -84,6 +84,8 @@ fwhm = 4
 hpcutoff = 50 
 n_proc = 1
 
+base_dir = '/projects/sanlab/shared/DEV/bids_data'
+
 
 # -----------------------
 # Setup basic inforamtion
@@ -112,7 +114,7 @@ n_proc = args.n_procs
 # ----------------------
     
 # start a wf for each subject
-os.makedirs(os.path.join(output_dir,'working',subj_id))
+os.makedirs(os.path.join(output_dir,'working',subj_id), exist_ok = True)
 wf = pe.Workflow(name = 'datainput')
 wf.base_dir = os.path.join(output_dir,'working',subj_id)
 
