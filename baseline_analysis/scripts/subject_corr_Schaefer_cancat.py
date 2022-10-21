@@ -1,10 +1,3 @@
-"""
-Author: Bernice Cheung 
-Date: 06/07/21
-
-This script is for computing subject level degree centrality based on baseline wholebrain connectivity. 
-"""
-
 import os
 import argparse
 import glob
@@ -28,13 +21,11 @@ from nilearn.plotting import plot_stat_map, view_img_on_surf
 from bids import BIDSLayout, BIDSValidator
 import nibabel as nib
 
-
 def extractData(base_dir, sub_id):
     '''
-    (str, str) -> Brain_Data
-    This function is used to extract data from both baseline acq of subject (sub_id) and concatenate them together. 
+    (str, str) -> list
+    This function is used to extract data from a specifc baseline acq (acq_id) of subject (sub_id) and concatenate them together. 
     '''
-
     # set directory & file names
     data_dir = os.path.join(base_dir, 'bids_data','rs_postfmriprep', f'sub-{sub_id}')
     acq1_filename = f'sub-{sub_id}_ses-wave1_task-rest_acq-1_bold_space-MNI152NLin2009cAsym_preproc.nii.gz'
@@ -43,14 +34,14 @@ def extractData(base_dir, sub_id):
     acq1_data = Brain_Data(load_img(os.path.join(data_dir, acq1_filename)))
     acq2_data = Brain_Data(load_img(os.path.join(data_dir, acq2_filename)))
     # concatenate both acq
-    data = acq1_data.append(acq2_data)
+    data_concate = acq1_data.append(acq2_data)
 
-    return data
+    return [data_concate, acq1_data, acq2_data]
 
 def load_covariates(base_dir, sub_id):
     '''
-    (str) -> DataFrame
-    This function load the covariates tsv files of both acq and concatenate them together. 
+    (str, str) -> list
+    This function load the covariates tsv files of the given acq(acq_id). 
     '''
     cov_dir = os.path.join(base_dir, 'bids_data', 'rs_derivatives','fmriprep', f'sub-{sub_id}', 'ses-wave1', 'func')
     cov_fileName_1 = f'sub-{sub_id}_ses-wave1_task-rest_acq-1_bold_confounds.tsv'
@@ -59,9 +50,9 @@ def load_covariates(base_dir, sub_id):
     covariates_1 = pd.read_csv(os.path.join(cov_dir, cov_fileName_1), sep = '\t')
     covariates_2 = pd.read_csv(os.path.join(cov_dir, cov_fileName_2), sep = '\t')
 
-    covariates = pd.concat([covariates_1, covariates_2]).reset_index()
+    cov_concate = pd.concat([covariates_1, covariates_2]).reset_index()
 
-    return covariates
+    return [cov_concate, covariates_1, covariates_2]
 
 def make_motion_covariates(covariates, tr):
     '''
@@ -89,78 +80,66 @@ def make_design_matrix(data, covariates, tr):
 
     return dm
 
+def make_design_matrix_noWM(data, covariates, tr):
+    '''
+    (Brain_Data, Data_Frame, float) -> 
+    This function will make a design matrix with the seed regressor and nusiance regressor including, motion, CSF, whitematter & spikes
+    '''
+
+    other_cov = covariates[['CSF']].apply(zscore)
+    mc = make_motion_covariates(covariates, tr)
+    spikes = data.find_spikes(global_spike_cutoff=3, diff_spike_cutoff=3)
+    dm = Design_Matrix(pd.concat([other_cov, mc, spikes.drop(labels='TR', axis=1)], axis=1), sampling_freq=1/tr)
+    dm = dm.add_poly(order=2, include_lower=True)
+
+    return dm
+
 # set subject ID from the imput 
-parser = argparse.ArgumentParser(description='subject level rs connectivity analysis')
-parser.add_argument(
-    '--sub-id',
-    required=True,
-    action='store',
-    help='subject id')
-args = parser.parse_args()
+#parser = argparse.ArgumentParser(description='subject level rs connectivity analysis')
+#parser.add_argument(
+#    '--sub-id',
+#    required=True,
+#    action='store',
+#    help='subject id')
+#args = parser.parse_args()
 
 # set dataset parameter
-base_dir = '/projects/sanlab/shared/DEV/'
-sub_id = args.sub_id
-
-# load the concatenated data
-data = extractData(base_dir, sub_id)
+base_dir = '/home/kcheung3/sanlab/DEV_RS/'
+bids_base_dir = '/projects/sanlab/shared/DEV/'
+sub_list_dir = os.path.join(base_dir, 'baseline_analysis', 'baseline_include_subjectList.txt')
+sub_list_file = open(sub_list_dir, "r")
+sub_list = sub_list_file.read().split("\n")
+sub_list_file.close()
+tr = 0.78
 
 # load the parcellation mask
-mask_dir = os.path.join(base_dir, 'DEV_scripts', 'rsfMRI', 'baseline_analysis')
-mask = Brain_Data(os.path.join(mask_dir, 'BN_Atlas_246_2mm.nii.gz'))
+mask_dir = os.path.join(base_dir, 'baseline_analysis')
+mask = Brain_Data(os.path.join(mask_dir, 'Schaefer2018_100Parcels_7Networks_order_FSLMNI152_2mm.nii.gz'))
 mask_x = expand_mask(mask)
 
-# load the concatenated covariates
-covariates = load_covariates(base_dir, sub_id)
+for sub_id in sub_list: 
+    
+    print('start with subject', sub_id)
+    
+    data_list = extractData(bids_base_dir, sub_id)
+    covariates_list = load_covariates(bids_base_dir, sub_id)
 
-# make a design matrix
-tr = 0.78
-dm = make_design_matrix(data, covariates, tr)
-data.X = dm
-
-# denoise the data
-stats = data.regress()
-data_denoised = stats['residual']
-
-# extract time series of each roi
-rois_data = data_denoised.extract_roi(mask=mask)
-
-# compute pair-wise partial correlation
-rois_df = pd.DataFrame(rois_data.T)
-roi_pcorr = rois_df.pcorr().to_numpy()
-
-# soft thresholding the partial correlation
-roi_pcorr_thresholded = np.power(((roi_pcorr + 1) / 2 ),6)
-
-# fisher r to z transform
-roi_pcorr_thresholded_z = np.arctanh(roi_pcorr_thresholded)
-
-# create a weighted adjacency matrix
-a = Adjacency(roi_pcorr_thresholded_z, matrix_type='similarity', labels=[x for x in range(246)])
-
-# generate a network 
-G = a.to_graph()
-node_and_degree = G.degree()
-
-# create weighted edges
-strength = G.degree(weight='weight')
-strengths = {node: val for (node, val) in strength}
-nx.set_node_attributes(G, dict(strength), 'strength') # Add as nodal attribute
-
-# convert the strength into a data frame
-strength_df = pd.DataFrame(list(strengths.values()), columns = [sub_id])
-# export the df
-fileName = sub_id + '_' + 'strength.csv'
-output_dir = os.path.join(base_dir, 'DEV_scripts', 'rsfMRI', 'baseline_analysis', 'subject_connectivity', fileName)
-strength_df.to_csv(output_dir, index=False)
-
-# Normalized node strength values 1/N-1
-normstrenghts = {node: val * 1/(len(G.nodes)-1) for (node, val) in strength}
-nx.set_node_attributes(G, normstrenghts, 'strengthnorm') # Add as nodal attribute
-
-# convert the normalized strength into a data frame
-normstrength_df = pd.DataFrame(list(normstrenghts.values()), columns = [sub_id])
-# export the df
-fileName = sub_id + '_' + 'normstrength.csv'
-output_dir = os.path.join(base_dir, 'DEV_scripts', 'rsfMRI', 'baseline_analysis', 'subject_connectivity', fileName)
-normstrength_df.to_csv(output_dir, index=False)
+    # load the concatenated data
+    data = data_list[0]
+    # load the present covariates
+    covariates = covariates_list[0]
+    # make a design matrix
+    dm = make_design_matrix(data, covariates, tr)
+    data.X = dm
+    # denoise the data
+    stats = data.regress()
+    data_denoised = stats['residual']
+    # extract time series of each roi
+    rois_data = data_denoised.extract_roi(mask=mask)
+    # compute pair-wise correlation
+    roi_corr = 1 - pairwise_distances(rois_data, metric='correlation')
+    # write the correlation to file
+    fileName = sub_id + '_concat_corr.csv'
+    output_dir = os.path.join(base_dir, 'baseline_analysis', 'subject_correlation', 'baseline_acq_schaefer', fileName)
+    corr_df = pd.DataFrame(roi_corr)
+    corr_df.to_csv(output_dir, index=False, header=False)
